@@ -1,4 +1,6 @@
-use std::usize;
+use std::{thread::sleep, time::Duration, usize};
+
+use pancurses::{endwin, Input, Window};
 
 // pos: position
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -159,6 +161,34 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     }
 }
 
+pub fn run_level<const LENY: usize, const LENX: usize>(window: &Window, level: &mut Level<LENY, LENX>) -> Result<(), String>{
+    let mut dir: Option<Dir>;
+    window.clear();
+    window.addstr(level.to_string());
+    window.refresh();
+    while !level.is_done() {
+        // window.addstr();
+        match window.getch() {
+            Some(Input::Character('q')) => {endwin(); return Err("User hit <q>".to_string());},
+            Some(Input::KeyUp) => dir = Some(Dir::Up),
+            Some(Input::KeyDown) => dir = Some(Dir::Down),
+            Some(Input::KeyLeft) => dir = Some(Dir::Left),
+            Some(Input::KeyRight) => dir = Some(Dir::Right),
+            _ => continue,
+        };
+        level.player_state = dir;
+        loop {
+            if let None = level.player_state {break}
+            level.tick();
+            window.clear();
+            window.addstr(level.to_string());
+            window.refresh();
+            sleep(Duration::from_millis(50));
+        }
+        window.refresh();
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
