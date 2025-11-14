@@ -62,15 +62,7 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         let [y, x] = pos;
         (..LENY).contains(&(y as usize)) && (..LENX).contains(&(x as usize))
     }
-    // fn check_pos_invalid(&pos: &[i8; 2]) -> bool { let [a, b] = pos; a < 0 || b < 0 || a > 5 || b > 11 }
 
-    // pub fn check_pos_valid(&pos: &[i8; 2]) -> Result<(), String> { 
-    //     if Self::check_pos_invalid(&pos) {
-    //         Err(format!("Invalid position: {:?}",pos))
-    //     } else {
-    //         Ok(())
-    //     }
-    // }
     pub fn check_pos_valid_from_size(&pos: &[i8; 2], &size: &[i8; 2]) -> Result<(), String> {
         let ([may, max], [y, x]) = (size, pos);
         if (..may).contains(&y) && (..max).contains(&x) {Ok(())}
@@ -88,11 +80,13 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     }
 
     pub fn change_pos(&mut self, &new_pos: &[i8; 2]) -> Result<(), String> {
-        if Cell::OutOfBounds == self.get_cell(&new_pos) {
-            Err(format!("New position out of bounds. Got: {:?}", new_pos))
-        } else {
-        self.current_pos = new_pos;
-        Ok(())
+        match self.get_cell(&new_pos) {
+            Cell::OutOfBounds => Err(format!("New position out of bounds. Got: {:?}", new_pos)),
+            Cell::Wall => Err(format!("New position is wall. Got: {:?}", new_pos)),
+            Cell::Player => Ok(()),
+            Cell::Empty | Cell::Goal => {
+                self.current_pos = new_pos; Ok(())
+            }
         }
     }
 
