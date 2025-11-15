@@ -1,19 +1,15 @@
 use std::{thread::sleep, time::Duration, usize};
 
-use pancurses::{endwin, Input, Window};
+use pancurses::{Attribute, Input, Window, endwin, resize_term};
 
 // pos: position
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Cell {
-    Empty, Wall, OutOfBounds, Player, Goal
-}
+pub enum Cell { Empty, Wall, OutOfBounds, Player, Goal }
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Dir {
-    Up, Down, Left, Right
-}
+pub enum Dir { Up, Down, Left, Right }
 
 #[derive(Debug)]
-#[allow(unused)]
 pub struct Level<const LENY: usize, const LENX: usize> {
     start_pos: [i8; 2],
     current_pos: [i8; 2],
@@ -31,9 +27,19 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     pub fn layout(&self) -> &[[Cell; LENX]; LENY] {&self.layout}
     pub fn size(&self) -> &[usize; 2] {&self.size}
 
-    fn new(&start_pos: &[i8; 2], &goal_pos: &[i8; 2], layout: [[Cell; LENX]; LENY]) -> Level<LENY, LENX>{
+    fn new(
+        &start_pos: &[i8; 2], 
+        &goal_pos: &[i8; 2], 
+        layout: [[Cell; LENX]; LENY]
+    ) -> Level<LENY, LENX>{
         // take ownership of layout(procesed)
-        Level {start_pos, current_pos: start_pos, goal_pos, layout, player_state: None, redraw_goal: None, size: [LENY, LENX]}
+        Level {start_pos, 
+            current_pos: start_pos, 
+            goal_pos, layout, 
+            player_state: None, 
+            redraw_goal: None, 
+            size: [LENY, LENX]
+        }
     }
 
     pub fn build(
@@ -41,11 +47,16 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         &goal_pos: &[i8; 2], 
         layout: &[[Cell; LENX]; LENY],
     ) -> Result<Level<LENY,LENX>, String> {
-        let size: [i8; 2] = [LENY.try_into().map_err(|_| "Len too big")?, LENX.try_into().map_err(|_| "Len too big")?];
+        let size: [i8; 2] = [LENY.try_into().map_err(|_| "Len too big")?, 
+                                LENX.try_into().map_err(|_| "Len too big")?];
         Self::check_pos_valid_from_size(&start_pos, &size)?;
         Self::check_pos_valid_from_size(&goal_pos, &size)?;
-        if Self::get_cell_from_layout(&layout, &start_pos) == Cell::Wall { return Err("Invalid start pos: start pos must be empty".to_string())}
-        if Self::get_cell_from_layout(&layout, &goal_pos) == Cell::Wall { return Err("Invalid end pos: end pos must be empty".to_string())}
+        if Self::get_cell_from_layout(&layout, &start_pos) != Cell::Empty { 
+            return Err("Invalid start pos: start pos must be empty".to_string())
+        }
+        if Self::get_cell_from_layout(&layout, &goal_pos) != Cell::Empty { 
+            return Err("Invalid goal pos: goal pos must be empty".to_string())
+        }
         let mut processed = layout.clone();
         processed[start_pos[0] as usize][start_pos[1] as usize] = Cell::Player;
         processed[goal_pos[0] as usize][goal_pos[1] as usize] = Cell::Goal;
@@ -56,7 +67,8 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
 
     pub fn build_from_tuple(
         (&start_pos, &goal_pos, layout, ): 
-        (&[i8; 2], &[i8; 2], &[[Cell; LENX]; LENY])) -> Result<Level<LENY, LENX>, String> {
+        (&[i8; 2], &[i8; 2], &[[Cell; LENX]; LENY])
+    ) -> Result<Level<LENY, LENX>, String> {
             Self::build(&start_pos, &goal_pos, &layout)
         }
 
@@ -65,13 +77,15 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         (..LENY).contains(&(y as usize)) && (..LENX).contains(&(x as usize))
     }
 
-    pub fn check_pos_valid_from_size(&pos: &[i8; 2], &size: &[i8; 2]) -> Result<(), String> {
+    pub fn check_pos_valid_from_size(&pos: &[i8; 2], &size: &[i8; 2]
+    ) -> Result<(), String> {
         let ([may, max], [y, x]) = (size, pos);
         if (..may).contains(&y) && (..max).contains(&x) {Ok(())}
         else {Err(format!("Invalid position: {:?}", pos))}
     }
 
-    fn get_cell_from_layout(layout: &[[Cell; LENX]; LENY], &pos: &[i8; 2]) -> Cell {
+    fn get_cell_from_layout(layout: &[[Cell; LENX]; LENY], &pos: &[i8; 2]
+    ) -> Cell {
         let [a, b] = pos;
         layout[a as usize][b as usize]
     }
@@ -81,10 +95,13 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         else { Self::get_cell_from_layout(&self.layout, &pos) } 
     }
 
-    pub fn change_pos(&mut self, &new_pos: &[i8; 2]) -> Result<(), String> {
+    pub fn change_pos(&mut self, &new_pos: &[i8; 2]
+    ) -> Result<(), String> {
         match self.get_cell(&new_pos) {
-            Cell::OutOfBounds => Err(format!("New position out of bounds. Got: {:?}", new_pos)),
-            Cell::Wall => Err(format!("New position is wall. Got: {:?}", new_pos)),
+            Cell::OutOfBounds => 
+                Err(format!("New position out of bounds. Got: {:?}", new_pos)),
+            Cell::Wall => 
+                Err(format!("New position is wall. Got: {:?}", new_pos)),
             Cell::Player => Ok(()),
             Cell::Empty | Cell::Goal => {
                 self.current_pos = new_pos; Ok(())
@@ -107,7 +124,8 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     pub fn move_player(&mut self, &d: &Dir) -> Result<bool, String> {
         let pos: [i8; 2] = self.get_relative_pos(&d);
         match self.get_cell(&pos) {
-            Cell::OutOfBounds => Err(format!("Cannot move {:?}: Out of bounds", d)),
+            Cell::OutOfBounds => 
+                Err(format!("Cannot move {:?}: Out of bounds", d)),
             Cell::Wall => Ok(false),
             Cell::Player => Err(format!("Unexpected player at {:?}", pos)),
             Cell::Empty => {
@@ -127,12 +145,18 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
             None => return,
             Some(dir) => {
                 let i_pos = self.current_pos;
+                //unwrap should not panic
                 if !self.move_player(&dir).or::<bool>(Ok(false)).unwrap() {
                     self.player_state = None;
                 } else {
                     self.layout[i_pos[0] as usize][i_pos[1] as usize] = 
-                        if self.redraw_goal == Some(i_pos) {self.redraw_goal = None; Cell::Goal} else {Cell::Empty};
-                    self.layout[self.current_pos[0] as usize][self.current_pos[1] as usize] = Cell::Player;
+                        if self.redraw_goal == Some(i_pos) {
+                            self.redraw_goal = None; Cell::Goal
+                        } else {Cell::Empty};
+                    self.layout
+                        [self.current_pos[0] as usize]
+                        [self.current_pos[1] as usize] 
+                        = Cell::Player;
                 }
             }
         }
@@ -142,49 +166,109 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         self.player_state == None && self.current_pos == self.goal_pos
     }
 
-    pub fn to_string(&self) -> String{
-        let mut result_str: String = String::new();
+    pub fn display(&self, window: &Window, title: &String) {
+        window.erase();
+        window.addch('\n');
         for row in &self.layout{
+            window.addch(' ');
             for c in row{
-                result_str += match c {
-                    Cell::Wall => "#",
-                    Cell::Empty => ".",
-                    Cell::Player => "O",
-                    Cell::Goal => "F",
-                    _ => "?",
+                match c {
+                    Cell::Wall => window.addch('#'),
+                    Cell::Empty => window.addch('.'),
+                    Cell::Player => window.addch('O'),
+                    Cell::Goal => {
+                        window.attron(Attribute::Reverse);
+                        window.addch('P');
+                        window.attroff(Attribute::Reverse)
+                    },
+                    _ => window.addch('?'),
                 };
-                result_str += " "
+                window.addch(' ');
             };
-            result_str += "\n"
-        }
-        result_str
+            // automatic wrap since window has len LENX*2+1
+            // window.addch('\n');
+        };
+        window.draw_box(0, 0);
+        window.mvprintw(0, 3, title);
+        window.mv(0, 0);
+        window.refresh();
     }
 }
 
-pub fn run_level<const LENY: usize, const LENX: usize>(window: &Window, level: &mut Level<LENY, LENX>) -> Result<(), String>{
-    let mut dir: Option<Dir>;
-    window.clear();
-    window.addstr(level.to_string());
-    window.refresh();
+pub fn run_level<const LENY: usize, const LENX: usize>(
+    root: &Window, 
+    level: &mut Level<LENY, LENX>,
+    title: &String
+) -> Result<(), String>{
+    let size = (LENY as i32 + 2, LENX as i32 * 2 + 1);
+    let mut dir: Dir;
+    let mut window = root.subwin(
+        size.0, size.1, 0, 0)
+        .or(Err("Error creating subwindow. Perhaps window too small?"))?;
+    window.keypad(true);
+
+    let resize = 
+        |window: &mut Window, level: &Level<LENY, LENX>| {
+            let y = (root.get_max_y() - window.get_max_y()) / 2;
+            let x = (root.get_max_x() - window.get_max_x()) / 2;
+            if y < 0 || x < 0 { return };
+            resize_term(0,0);
+            window.resize(size.0, size.1);
+            match window.mvwin(y, x) {
+                -1 => panic!("{:?}", (y, x)),
+                _ => {
+                    root.clear();
+                    root.refresh();
+                    level.display(window, title);
+                    window.refresh();
+                }
+            };
+        };
+        
+    resize(&mut window, &level); // centers level
+    level.display(&window, title);
     while !level.is_done() {
         // window.addstr();
+        window.nodelay(false);
         match window.getch() {
-            Some(Input::Character('q')) => {endwin(); return Err("User hit <q>".to_string());},
-            Some(Input::KeyUp) => dir = Some(Dir::Up),
-            Some(Input::KeyDown) => dir = Some(Dir::Down),
-            Some(Input::KeyLeft) => dir = Some(Dir::Left),
-            Some(Input::KeyRight) => dir = Some(Dir::Right),
+            Some(Input::Character('q')) => {
+                endwin(); 
+                return Err("User hit <q>".to_string());
+            },
+            Some(Input::KeyUp) => dir = Dir::Up,
+            Some(Input::KeyDown) => dir = Dir::Down,
+            Some(Input::KeyLeft) => dir = Dir::Left,
+            Some(Input::KeyRight) => dir = Dir::Right,
+            Some(Input::KeyResize) => {
+                resize(&mut window, &level);
+                continue;
+            }
             _ => continue,
         };
-        level.player_state = dir;
+
+        level.player_state = Some(dir);
         loop {
             if let None = level.player_state {break}
+            window.nodelay(true);
             level.tick();
-            window.clear();
-            window.addstr(level.to_string());
-            window.refresh();
-            sleep(Duration::from_millis(50));
+            level.display(&window, title);
+            window.refresh();            
+            sleep(Duration::from_millis(40));
+            // prevents key spamming issue
+            while let Some(input) = window.getch() {
+                match input {
+                    Input::Character('q') => {
+                        endwin();
+                        return Err("User hit <q>".to_string());
+                    }
+                    Input::KeyResize => {
+                        resize(&mut window, &level);
+                    },
+                    _ => ()
+                }
+            }
         }
+        window.nodelay(false);
         window.refresh();
     }
     Ok(())
@@ -217,6 +301,7 @@ mod tests {
     #[test]
     fn change_pos_illegal() {
         let mut level = empty_level();
-        level.change_pos(&[12, 6]).expect_err("Should raise an error as out of bound");
+        level.change_pos(&[12, 6])
+            .expect_err("Should raise an error as out of bound");
     }
 }

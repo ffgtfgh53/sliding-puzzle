@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::Cell;
 
 const E: Cell = Cell::Empty;
@@ -16,7 +18,7 @@ pub const LEVEL1: (&[i8; 2], &[i8; 2], &[[Cell; 12]; 6]) = (&[0, 0], &[4, 4], &L
 
 const LEVEL_2_LAYOUT: [[Cell; 20]; 10] = [
     [E, E, E, E, E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, E],
-    [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E],
+    [W, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E],
     [E, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E, E, E, E],
     [E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E],
     [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E],
@@ -24,9 +26,24 @@ const LEVEL_2_LAYOUT: [[Cell; 20]; 10] = [
     [E, E, E, E, W, E, E, E, E, E, E, E, E, E, W, E, E, E, E, E],
     [E, E, E, E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, E, E],
     [E, E, W, E, E, E, E, E, E, W, E, E, E, E, E, E, E, E, E, E],
-    [E, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E, E, E, E],
+    [W, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E, E, E, W],
 ];
 
-pub const LEVEL2: (&[i8; 2], &[i8; 2], &[[Cell; 20]; 10]) = (&[0, 0], &[9, 19], &LEVEL_2_LAYOUT);
+pub const LEVEL2: (&[i8; 2], &[i8; 2], &[[Cell; 20]; 10]) = (&[0, 0], &[1, 1], &LEVEL_2_LAYOUT);
+
+const LEVEL_3_LAYOUT: [[Cell; 20]; 10] = [
+    [E, W, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E], 
+    [E, E, E, E, E, E, E, E, W, E, E, E, E, E, E, W, E, E, E, E], 
+    [W, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E], 
+    [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E, E], 
+    [W, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E], 
+    [E, E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E], 
+    [E, E, W, E, E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, E], 
+    [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, W, E, E, E], 
+    [E, E, E, E, E, W, E, E, E, E, E, E, E, E, E, E, E, E, E, E], 
+    [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E], 
+];
+
+pub const LEVEL3: (&[i8; 2], &[i8; 2], &[[Cell; 20]; 10]) = (&[0, 0], &[1, 1], &LEVEL_3_LAYOUT);
 
 
