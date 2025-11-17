@@ -1,6 +1,10 @@
 use std::{thread::sleep, time::Duration, usize};
 
-use pancurses::{Attribute, Input, Window, endwin, resize_term};
+use pancurses::{Attribute, COLOR_PAIR, Input, Window, endwin, resize_term};
+
+use crate::init::{BLACK, GREEN, RED};
+
+mod init;
 
 // pos: position
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -174,12 +178,22 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
             for c in row{
                 match c {
                     Cell::Wall => window.addch('#'),
-                    Cell::Empty => window.addch('.'),
-                    Cell::Player => window.addch('O'),
+                    Cell::Empty => {
+                        window.attron(COLOR_PAIR(BLACK));
+                        window.addch('.');
+                        window.attroff(COLOR_PAIR(BLACK))
+                    },
+                    Cell::Player => {
+                        window.attron(Attribute::Blink);
+                        window.attron(COLOR_PAIR(RED));
+                        window.addch('O');
+                        window.attroff(COLOR_PAIR(RED));
+                        window.attroff(Attribute::Blink)
+                    },
                     Cell::Goal => {
-                        window.attron(Attribute::Reverse);
+                        window.attron(COLOR_PAIR(GREEN));
                         window.addch('P');
-                        window.attroff(Attribute::Reverse)
+                        window.attroff(COLOR_PAIR(GREEN))
                     },
                     _ => window.addch('?'),
                 };
@@ -199,7 +213,7 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
     root: &Window, 
     level: &mut Level<LENY, LENX>,
     title: &String
-) -> Result<(), String>{
+) -> Result<Menuitems, String>{
     let size = (LENY as i32 + 2, LENX as i32 * 2 + 1);
     let mut dir: Dir;
     let mut window = root.subwin(
@@ -233,7 +247,7 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
         match window.getch() {
             Some(Input::Character('q')) => {
                 endwin(); 
-                return Err("User hit <q>".to_string());
+                return Ok(Menuitems::Exit);
             },
             Some(Input::KeyUp) => dir = Dir::Up,
             Some(Input::KeyDown) => dir = Dir::Down,
@@ -253,13 +267,13 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
             level.tick();
             level.display(&window, title);
             window.refresh();            
-            sleep(Duration::from_millis(40));
+            sleep(Duration::from_millis(30));
             // prevents key spamming issue
             while let Some(input) = window.getch() {
                 match input {
                     Input::Character('q') => {
                         endwin();
-                        return Err("User hit <q>".to_string());
+                        return Ok(Menuitems::Exit);
                     }
                     Input::KeyResize => {
                         resize(&mut window, &level);
@@ -271,7 +285,103 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
         window.nodelay(false);
         window.refresh();
     }
-    Ok(())
+    Ok(Menuitems::Next)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Menuitems {
+    Next, Select, Exit
+}
+
+impl Menuitems {
+    pub const fn array() -> [Menuitems; 3] {
+        use Menuitems::*;
+        [Next, Select, Exit]
+    }
+    pub fn to_str(&self) -> &str {
+        match self {
+            Menuitems::Next => "Next level",
+            Menuitems::Select => "Select Level",
+            Menuitems::Exit => "Exit"
+        }
+    }
+    pub fn to_str_main_menu(&self) -> &str {
+        match self {
+            Menuitems::Next => "Start",
+            item => item.to_str()
+        }
+    }
+    pub const fn size() -> (i32, i32) {(5, 20)}
+}
+
+
+#[allow(non_upper_case_globals)]
+pub fn menu(root: &Window) -> Result<Menuitems, &str>{
+    let mut selected: usize = 0;
+    const selected_max: usize = Menuitems::array().len() - 1;
+    
+    let resize = |window: &mut Window| {
+        let size = Menuitems::size();
+        let y = (root.get_max_y() - size.0) / 2;
+        let x = (root.get_max_x() - size.1) / 2;
+        if y < 0 || x < 0 { return };
+        match window.mvwin(y, x) {
+            -1 => panic!("{:?}", (y, x)),
+            _ => {
+                root.erase();
+                root.refresh();
+                window.refresh();
+            }
+        }
+    };
+
+    let mut window = root.subwin(
+        Menuitems::size().0, 
+        Menuitems::size().1,
+        0, 0
+    ).map_err(|_| "Cound not create window, terminal too small?")?;
+
+    window.nodelay(false);
+    resize(&mut window);
+    // window.attrset(COLOR_PAIR(BLACK));
+    window.refresh();
+    root.refresh();
+    loop {
+        window.erase();
+        
+        for (i, item) in Menuitems::array().iter().enumerate() {
+            if i == selected {
+                window.attron(COLOR_PAIR(GREEN));
+                window.mvaddstr(i as i32 + 1, 2, 
+                    format!("> {}", item.to_str_main_menu()));
+                window.attroff(COLOR_PAIR(GREEN));
+            } else {
+                window.attron(COLOR_PAIR(BLACK));
+                window.mvaddstr(i as i32 + 1, 4, 
+                    format!("{}", item.to_str_main_menu()));
+            }
+            window.addch('\n');
+        }
+
+        window.draw_box(0, 0);
+        window.mvaddstr(0, 2, "Menu");
+
+        window.refresh();
+        match root.getch().expect("Should wait for input") {
+            Input::KeyUp if selected > 0 => selected -= 1,
+            Input::KeyUp => selected = selected_max,
+            Input::KeyDown if selected < selected_max => selected += 1,
+            Input::KeyDown => selected = 0,
+            Input::Character('q') => return Ok(Menuitems::Exit),
+            Input::KeyEnter | Input::Character('\n') => 
+                return Ok(Menuitems::array()[selected]),
+            Input::KeyResize => resize(&mut window),
+            _ => continue
+        }
+
+    }
+
+
 }
 
 #[cfg(test)]
