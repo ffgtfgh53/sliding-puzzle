@@ -20,8 +20,8 @@ pub struct Level<const LENY: usize, const LENX: usize> {
     goal_pos: [i8; 2],
     layout: [[Cell; LENX]; LENY],
     pub player_state: Option<Dir>,
+    pub title: String,
     redraw_goal: Option<[i8; 2]>, //need to improve, simply check goal_pos
-    size: [usize; 2],
 }
 
 impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
@@ -29,12 +29,12 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     pub fn current_pos(&self) -> &[i8; 2] {&self.current_pos}
     pub fn goal_pos(&self) -> &[i8; 2] {&self.goal_pos}
     pub fn layout(&self) -> &[[Cell; LENX]; LENY] {&self.layout}
-    pub fn size(&self) -> &[usize; 2] {&self.size}
 
     fn new(
         &start_pos: &[i8; 2], 
         &goal_pos: &[i8; 2], 
-        layout: [[Cell; LENX]; LENY]
+        layout: [[Cell; LENX]; LENY],
+        title: String,
     ) -> Level<LENY, LENX>{
         // take ownership of layout(procesed)
         Level {start_pos, 
@@ -42,14 +42,15 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
             goal_pos, layout, 
             player_state: None, 
             redraw_goal: None, 
-            size: [LENY, LENX]
+            title: title,
         }
     }
 
-    pub fn build(
+    pub fn build<T: ToString>(
         &start_pos: &[i8; 2], 
         &goal_pos: &[i8; 2], 
         layout: &[[Cell; LENX]; LENY],
+        title: T,
     ) -> Result<Level<LENY,LENX>, String> {
         let size: [i8; 2] = [LENY.try_into().map_err(|_| "Len too big")?, 
                                 LENX.try_into().map_err(|_| "Len too big")?];
@@ -66,14 +67,14 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         processed[goal_pos[0] as usize][goal_pos[1] as usize] = Cell::Goal;
         // not complete checks, but checking if solvable requires solving it
         // will at least prevent panicking due to invalid pos
-        Ok(Level::new(&start_pos, &goal_pos, processed))
+        Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string()))
     }
 
-    pub fn build_from_tuple(
-        (&start_pos, &goal_pos, layout, ): 
-        (&[i8; 2], &[i8; 2], &[[Cell; LENX]; LENY])
+    pub fn build_from_tuple<T: ToString>(
+        (&start_pos, &goal_pos, layout, title): 
+        (&[i8; 2], &[i8; 2], &[[Cell; LENX]; LENY], T)
     ) -> Result<Level<LENY, LENX>, String> {
-            Self::build(&start_pos, &goal_pos, &layout)
+            Self::build(&start_pos, &goal_pos, &layout, title)
         }
 
     pub fn is_pos_valid(&pos: &[i8; 2]) -> bool {
@@ -170,7 +171,7 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         self.player_state == None && self.current_pos == self.goal_pos
     }
 
-    pub fn display(&self, window: &Window, title: &String) {
+    pub fn display(&self, window: &Window) {
         window.erase();
         window.addch('\n');
         for row in &self.layout{
@@ -203,7 +204,7 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
             // window.addch('\n');
         };
         window.draw_box(0, 0);
-        window.mvprintw(0, 3, title);
+        window.mvprintw(0, 3, &self.title);
         window.mv(0, 0);
         window.refresh();
     }
@@ -212,7 +213,6 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
 pub fn run_level<const LENY: usize, const LENX: usize>(
     root: &Window, 
     level: &mut Level<LENY, LENX>,
-    title: &String
 ) -> Result<Menuitems, String>{
     let size = (LENY as i32 + 2, LENX as i32 * 2 + 1);
     let mut dir: Dir;
@@ -233,14 +233,14 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
                 _ => {
                     root.clear();
                     root.refresh();
-                    level.display(window, title);
+                    level.display(window);
                     window.refresh();
                 }
             };
         };
         
     resize(&mut window, &level); // centers level
-    level.display(&window, title);
+    level.display(&window);
     while !level.is_done() {
         // window.addstr();
         window.nodelay(false);
@@ -265,7 +265,7 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
             if let None = level.player_state {break}
             window.nodelay(true);
             level.tick();
-            level.display(&window, title);
+            level.display(&window);
             window.refresh();            
             sleep(Duration::from_millis(30));
             // prevents key spamming issue
@@ -392,7 +392,8 @@ mod tests {
         Level::new(
             &[0,0], 
             &[11,6], 
-            [[Cell::Empty; 12]; 6]
+            [[Cell::Empty; 12]; 6],
+            "Test Level".to_string()
         )
     }
 
