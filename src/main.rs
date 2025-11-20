@@ -8,9 +8,12 @@ mod init;
 
 fn main() -> Result<(), String>{
 
-    let mut level1 = Level::build_from_tuple(levels::LEVEL1).unwrap();
-    let mut level2 = Level::build_from_tuple(levels::LEVEL2).unwrap();
-    let mut level3 = Level::build_from_tuple(levels::LEVEL3).unwrap();
+    let mut level1 = Level::build_from_tuple(levels::LEVEL1)
+        .expect("Built in levels should not fail building");
+    let mut level2 = Level::build_from_tuple(levels::LEVEL2)
+        .expect("Built in levels should not fail building");
+    let mut level3 = Level::build_from_tuple(levels::LEVEL3)
+        .expect("Built in levels should not fail building");
 
     let window = initscr();
     window.keypad(true);
@@ -42,17 +45,15 @@ fn main() -> Result<(), String>{
 
     handle!(run_level(
         &window, 
-        &mut level1, 
-        &"Level 1".to_string()));
+        &mut level1
+    ));
     handle!(run_level(
         &window, 
-        &mut level2, 
-        &"Level 2".to_string()
+        &mut level2
     ));
     handle!(run_level(
         &window, 
         &mut level3, 
-        &"Level 3".to_string()
     ));
     
     endwin_return!(Ok(()))
