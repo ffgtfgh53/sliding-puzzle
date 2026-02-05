@@ -1,6 +1,6 @@
 use pancurses::{endwin, initscr};
 
-use sliding_puzzle::{Cell, Level, Menuitems, menu, run_level};
+use sliding_puzzle::{Level, Menuitems, menu, run_level};
 
 mod levels;
 
@@ -58,4 +58,3 @@ fn main() -> Result<(), String>{
     
     endwin_return!(Ok(()))
 }
-

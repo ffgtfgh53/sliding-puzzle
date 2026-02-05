@@ -172,31 +172,29 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     }
 
     pub fn display(&self, window: &Window) {
+        //! Clears the window and displays the level in the window.
         window.erase();
         window.addch('\n');
         for row in &self.layout{
             window.addch(' ');
             for c in row{
                 match c {
-                    Cell::Wall => window.addch('#'),
-                    Cell::Empty => {
-                        window.attron(COLOR_PAIR(BLACK));
-                        window.addch('.');
-                        window.attroff(COLOR_PAIR(BLACK))
-                    },
+                    Cell::Wall => { window.addch('#'); },
+                    Cell::Empty => { window.addch('.'); },
                     Cell::Player => {
                         window.attron(Attribute::Blink);
                         window.attron(COLOR_PAIR(RED));
                         window.addch('O');
                         window.attroff(COLOR_PAIR(RED));
-                        window.attroff(Attribute::Blink)
+                        window.attroff(Attribute::Blink);
                     },
                     Cell::Goal => {
                         window.attron(COLOR_PAIR(GREEN));
                         window.addch('P');
-                        window.attroff(COLOR_PAIR(GREEN))
+                        window.attroff(COLOR_PAIR(GREEN));
                     },
-                    _ => window.addch('?'),
+                    // Unknown character
+                    _ => { window.addch('?'); },
                 };
                 window.addch(' ');
             };
@@ -213,7 +211,7 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
 pub fn run_level<const LENY: usize, const LENX: usize>(
     root: &Window, 
     level: &mut Level<LENY, LENX>,
-) -> Result<Menuitems, String>{
+) -> Result<Menuitems, String> {
     let size = (LENY as i32 + 2, LENX as i32 * 2 + 1);
     let mut dir: Dir;
     let mut window = root.subwin(
