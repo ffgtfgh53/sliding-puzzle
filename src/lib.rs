@@ -1,59 +1,124 @@
-use std::{thread::sleep, time::Duration, usize};
+use std::{error::Error, fs::{read_to_string, write}, path::Path, thread::sleep, time::Duration, usize};
 
 use pancurses::{Attribute, COLOR_PAIR, Input, Window, endwin, resize_term};
+
+use serde::{Serialize, Deserialize};
 
 use crate::init::{BLACK, GREEN, RED};
 
 mod init;
 
+fn tostr<E: Error>(e: E) -> String { e.to_string() }
+
 // pos: position
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Cell { Empty, Wall, OutOfBounds, Player, Goal }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Dir { Up, Down, Left, Right }
 
-#[derive(Debug)]
-pub struct Level<const LENY: usize, const LENX: usize> {
-    start_pos: [i8; 2],
-    current_pos: [i8; 2],
-    goal_pos: [i8; 2],
-    layout: [[Cell; LENX]; LENY],
-    pub player_state: Option<Dir>,
-    pub title: String,
-    redraw_goal: Option<[i8; 2]>, //need to improve, simply check goal_pos
+#[derive(Debug, Serialize, Deserialize)]
+struct LevelBuilder{
+    start_pos: [usize; 2],
+    goal_pos: [usize; 2],
+    layout: Vec<Vec<Cell>>,
+    title: String
+}
+impl LevelBuilder {
+    fn from_file<P: AsRef<Path>>(filepath: P) -> Result<LevelBuilder, String> {
+        serde_json::from_str(
+            &read_to_string(&filepath)
+            .map_err(|_| "Error reading file")?)
+        .map(|mut lev: LevelBuilder| {
+            lev.title = filepath
+                        .as_ref()
+                        .file_stem()
+                        .map_or(None, |p| {
+                            p.to_str().map(|s| s.to_string())})
+                        .unwrap_or_else(|| lev.title); lev})
+        .map_err(tostr)
+    }
+    // temp
+    // pub fn from_tuple<const X: usize, const Y: usize, T: ToString>(
+    //     (&start_pos, &goal_pos, layout, title): 
+    //     (&[usize; 2], &[usize; 2], &[[Cell; X]; Y], T)
+    // ) -> LevelBuilder  {
+    //     LevelBuilder{
+    //         start_pos: start_pos,
+    //         goal_pos: goal_pos,
+    //         layout: Self::array_to_vec(layout),
+    //         title: title.to_string()
+    //     }
+    // }
+    // pub fn array_to_vec<const X:usize, const Y:usize>(arr: &[[Cell; X]; Y])
+    // -> Vec<Vec<Cell>> {
+    //     arr
+    //     .iter()
+    //     .map(
+    //         |inner| inner.iter().cloned().collect()
+    //     ).collect()
+    // }
+
+    #[allow(dead_code)]
+    fn write_to_file<P: AsRef<Path>>(&self, filepath: P) -> Result<(), String> {
+        write(filepath, serde_json::to_string(self).map_err(tostr)?).map_err(tostr)?;
+        Ok(())
+    }
 }
 
-impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
-    pub fn start_pos(&self) -> &[i8; 2] {&self.start_pos}
-    pub fn current_pos(&self) -> &[i8; 2] {&self.current_pos}
-    pub fn goal_pos(&self) -> &[i8; 2] {&self.goal_pos}
-    pub fn layout(&self) -> &[[Cell; LENX]; LENY] {&self.layout}
+#[derive(Debug)]
+pub struct Level{
+    start_pos: [usize; 2],
+    current_pos: [usize; 2],
+    goal_pos: [usize; 2],
+    layout: Vec<Vec<Cell>>,
+    size: [usize; 2],
+    pub player_state: Option<Dir>,
+    pub title: String,
+    redraw_goal: Option<[usize; 2]>, //need to improve, simply check goal_pos
+}
+
+impl Level {
+    pub fn start_pos(&self) -> &[usize; 2] {&self.start_pos}
+    pub fn current_pos(&self) -> &[usize; 2] {&self.current_pos}
+    pub fn goal_pos(&self) -> &[usize; 2] {&self.goal_pos}
+    pub fn layout(&self) -> &Vec<Vec<Cell>> {&self.layout}
 
     fn new(
-        &start_pos: &[i8; 2], 
-        &goal_pos: &[i8; 2], 
-        layout: [[Cell; LENX]; LENY],
+        &start_pos: &[usize; 2], 
+        &goal_pos: &[usize; 2], 
+        layout: Vec<Vec<Cell>>,
         title: String,
-    ) -> Level<LENY, LENX>{
+        size: [usize; 2]
+    ) -> Level{
         // take ownership of layout(procesed)
         Level {start_pos, 
             current_pos: start_pos, 
-            goal_pos, layout, 
+            goal_pos, 
+            layout, 
             player_state: None, 
             redraw_goal: None, 
             title: title,
+            size: size,
         }
     }
 
     pub fn build<T: ToString>(
-        &start_pos: &[i8; 2], 
-        &goal_pos: &[i8; 2], 
-        layout: &[[Cell; LENX]; LENY],
+        &start_pos: &[usize; 2], 
+        &goal_pos: &[usize; 2], 
+        layout: &Vec<Vec<Cell>>,
         title: T,
-    ) -> Result<Level<LENY,LENX>, String> {
-        let size: [i8; 2] = [LENY.try_into().map_err(|_| "Len too big")?, 
-                                LENX.try_into().map_err(|_| "Len too big")?];
+        size: Option<[usize; 2]>
+    ) -> Result<Level, String> {
+        let size = match size {
+            Some(size) => size,
+            None => {
+                let size: [usize; 2] = [layout.len(), layout[0].len()];
+                if layout.into_iter().any(|row| row.len() != size[1]) {
+                    return Err("Length of rows are not the same".to_string());
+                } else {size}
+            }
+        };
         Self::check_pos_valid_from_size(&start_pos, &size)?;
         Self::check_pos_valid_from_size(&goal_pos, &size)?;
         if Self::get_cell_from_layout(&layout, &start_pos) != Cell::Empty { 
@@ -67,40 +132,52 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         processed[goal_pos[0] as usize][goal_pos[1] as usize] = Cell::Goal;
         // not complete checks, but checking if solvable requires solving it
         // will at least prevent panicking due to invalid pos
-        Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string()))
+        Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string(), size))
     }
 
     pub fn build_from_tuple<T: ToString>(
         (&start_pos, &goal_pos, layout, title): 
-        (&[i8; 2], &[i8; 2], &[[Cell; LENX]; LENY], T)
-    ) -> Result<Level<LENY, LENX>, String> {
-            Self::build(&start_pos, &goal_pos, &layout, title)
+        (&[usize; 2], &[usize; 2], &Vec<Vec<Cell>>, T)
+    ) -> Result<Level, String> {
+            Self::build(&start_pos, &goal_pos, &layout, title, None)
         }
 
-    pub fn is_pos_valid(&pos: &[i8; 2]) -> bool {
-        let [y, x] = pos;
-        (..LENY).contains(&(y as usize)) && (..LENX).contains(&(x as usize))
+    pub fn build_from_file<P: AsRef<Path>>(filepath: P) 
+    -> Result<Level, String> {
+        let builder = LevelBuilder::from_file(filepath)?;
+        let size = [builder.layout.len(), builder.layout[0].len()];
+        for r in &builder.layout {
+            if r.len() != size[1] { 
+                return Err("Rows are not the same length".to_string()); 
+            }
+        };
+        Self::build(&builder.start_pos, &builder.goal_pos, &builder.layout, builder.title, Some(size))
     }
 
-    pub fn check_pos_valid_from_size(&pos: &[i8; 2], &size: &[i8; 2]
+    pub fn is_pos_valid(&self, &pos: &[usize; 2]) -> bool {
+        let [y, x] = pos;
+        (..self.size[0]).contains(&(y as usize)) && (..self.size[1]).contains(&(x as usize))
+    }
+
+    pub fn check_pos_valid_from_size(&pos: &[usize; 2], &size: &[usize; 2]
     ) -> Result<(), String> {
         let ([may, max], [y, x]) = (size, pos);
         if (..may).contains(&y) && (..max).contains(&x) {Ok(())}
         else {Err(format!("Invalid position: {:?}", pos))}
     }
 
-    fn get_cell_from_layout(layout: &[[Cell; LENX]; LENY], &pos: &[i8; 2]
+    fn get_cell_from_layout(layout: &Vec<Vec<Cell>>, &pos: &[usize; 2]
     ) -> Cell {
         let [a, b] = pos;
         layout[a as usize][b as usize]
     }
 
-    pub fn get_cell(&self, &pos: &[i8; 2]) -> Cell {
-        if !Self::is_pos_valid(&pos) { Cell::OutOfBounds } 
+    pub fn get_cell(&self, &pos: &[usize; 2]) -> Cell {
+        if !self.is_pos_valid(&pos) { Cell::OutOfBounds } 
         else { Self::get_cell_from_layout(&self.layout, &pos) } 
     }
 
-    pub fn change_pos(&mut self, &new_pos: &[i8; 2]
+    pub fn change_pos(&mut self, &new_pos: &[usize; 2]
     ) -> Result<(), String> {
         match self.get_cell(&new_pos) {
             Cell::OutOfBounds => 
@@ -114,20 +191,20 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
         }
     }
 
-    pub fn get_relative_pos(&self, d: &Dir) -> [i8; 2] {
+    pub fn get_relative_pos(&self, d: &Dir) -> Option<[usize; 2]> {
         let mut pos = self.current_pos;
-
         match d {
-            Dir::Down => pos[0] += 1,
-            Dir::Left => pos[1] -= 1,
-            Dir::Right => pos[1] += 1,
-            Dir::Up => pos[0] -= 1,
-        }
-        pos
+            Dir::Down  => pos[0] = pos[0].checked_add(1)?,
+            Dir::Left  => pos[1] = pos[1].checked_sub(1)?,
+            Dir::Right => pos[1] = pos[1].checked_add(1)?,
+            Dir::Up    => pos[0] = pos[0].checked_sub(1)?,
+        };
+        Some(pos)
     }
 
     pub fn move_player(&mut self, &d: &Dir) -> Result<bool, String> {
-        let pos: [i8; 2] = self.get_relative_pos(&d);
+        let pos: [usize; 2] = 
+            self.get_relative_pos(&d).ok_or(format!("Cannot move {:?}: Out of bounds", d))?;
         match self.get_cell(&pos) {
             Cell::OutOfBounds => 
                 Err(format!("Cannot move {:?}: Out of bounds", d)),
@@ -208,11 +285,11 @@ impl<const LENY: usize, const LENX: usize> Level<LENY, LENX> {
     }
 }
 
-pub fn run_level<const LENY: usize, const LENX: usize>(
+pub fn run_level(
     root: &Window, 
-    level: &mut Level<LENY, LENX>,
+    level: &mut Level,
 ) -> Result<Menuitems, String> {
-    let size = (LENY as i32 + 2, LENX as i32 * 2 + 1);
+    let size = (level.size[0] as i32 + 2, level.size[1] as i32 * 2 + 1);
     let mut dir: Dir;
     let mut window = root.subwin(
         size.0, size.1, 0, 0)
@@ -220,7 +297,7 @@ pub fn run_level<const LENY: usize, const LENX: usize>(
     window.keypad(true);
 
     let resize = 
-        |window: &mut Window, level: &Level<LENY, LENX>| {
+        |window: &mut Window, level: &Level| {
             let y = (root.get_max_y() - window.get_max_y()) / 2;
             let x = (root.get_max_x() - window.get_max_x()) / 2;
             if y < 0 || x < 0 { return };
@@ -386,12 +463,13 @@ pub fn menu(root: &Window) -> Result<Menuitems, &str>{
 mod tests {
     use super::*;
 
-    fn empty_level() -> Level<6, 12>{
+    fn empty_level() -> Level{
         Level::new(
             &[0,0], 
             &[11,6], 
-            [[Cell::Empty; 12]; 6],
-            "Test Level".to_string()
+            vec![vec![Cell::Empty; 12]; 6],
+            "Test Level".to_string(),
+            [12, 6]
         )
     }
 
