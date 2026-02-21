@@ -1,4 +1,4 @@
-use std::{error::Error, fs::{read_to_string, write}, path::Path, thread::sleep, time::Duration, usize};
+use std::{error::Error, fs::read_to_string, path::Path, thread::sleep, time::Duration, usize};
 
 use pancurses::{Attribute, COLOR_PAIR, Input, Window, endwin, resize_term};
 
@@ -8,9 +8,6 @@ use crate::init::{BLACK, GREEN, RED};
 
 mod init;
 
-fn tostr<E: Error>(e: E) -> String { e.to_string() }
-
-// pos: position
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Cell { Empty, Wall, OutOfBounds, Player, Goal }
 
@@ -22,48 +19,7 @@ struct LevelBuilder{
     start_pos: [usize; 2],
     goal_pos: [usize; 2],
     layout: Vec<Vec<Cell>>,
-    title: String
-}
-impl LevelBuilder {
-    fn from_file<P: AsRef<Path>>(filepath: P) -> Result<LevelBuilder, String> {
-        serde_json::from_str(
-            &read_to_string(&filepath)
-            .map_err(|_| "Error reading file")?)
-        .map(|mut lev: LevelBuilder| {
-            lev.title = filepath
-                        .as_ref()
-                        .file_stem()
-                        .map_or(None, |p| {
-                            p.to_str().map(|s| s.to_string())})
-                        .unwrap_or_else(|| lev.title); lev})
-        .map_err(tostr)
-    }
-    // temp
-    // pub fn from_tuple<const X: usize, const Y: usize, T: ToString>(
-    //     (&start_pos, &goal_pos, layout, title): 
-    //     (&[usize; 2], &[usize; 2], &[[Cell; X]; Y], T)
-    // ) -> LevelBuilder  {
-    //     LevelBuilder{
-    //         start_pos: start_pos,
-    //         goal_pos: goal_pos,
-    //         layout: Self::array_to_vec(layout),
-    //         title: title.to_string()
-    //     }
-    // }
-    // pub fn array_to_vec<const X:usize, const Y:usize>(arr: &[[Cell; X]; Y])
-    // -> Vec<Vec<Cell>> {
-    //     arr
-    //     .iter()
-    //     .map(
-    //         |inner| inner.iter().cloned().collect()
-    //     ).collect()
-    // }
-
-    #[allow(dead_code)]
-    fn write_to_file<P: AsRef<Path>>(&self, filepath: P) -> Result<(), String> {
-        write(filepath, serde_json::to_string(self).map_err(tostr)?).map_err(tostr)?;
-        Ok(())
-    }
+    title: Option<String>
 }
 
 #[derive(Debug)]
@@ -91,7 +47,8 @@ impl Level {
         title: String,
         size: [usize; 2]
     ) -> Level{
-        // take ownership of layout(procesed)
+        // take ownership of layout (build function clones the layout)
+        // TODO: add reset function to allow reuse of levels without cloning layout
         Level {start_pos, 
             current_pos: start_pos, 
             goal_pos, 
@@ -109,23 +66,24 @@ impl Level {
         layout: &Vec<Vec<Cell>>,
         title: T,
         size: Option<[usize; 2]>
-    ) -> Result<Level, String> {
+    ) -> Result<Level, Box<dyn Error>> {
         let size = match size {
             Some(size) => size,
             None => {
+                // check layout is rectangular
                 let size: [usize; 2] = [layout.len(), layout[0].len()];
                 if layout.into_iter().any(|row| row.len() != size[1]) {
-                    return Err("Length of rows are not the same".to_string());
+                    Err("Length of rows are not the same")?
                 } else {size}
             }
         };
         Self::check_pos_valid_from_size(&start_pos, &size)?;
         Self::check_pos_valid_from_size(&goal_pos, &size)?;
         if Self::get_cell_from_layout(&layout, &start_pos) != Cell::Empty { 
-            return Err("Invalid start pos: start pos must be empty".to_string())
+            Err("Invalid start pos: start pos must be empty")?
         }
         if Self::get_cell_from_layout(&layout, &goal_pos) != Cell::Empty { 
-            return Err("Invalid goal pos: goal pos must be empty".to_string())
+            Err("Invalid goal pos: goal pos must be empty")?
         }
         let mut processed = layout.clone();
         processed[start_pos[0] as usize][start_pos[1] as usize] = Cell::Player;
@@ -135,23 +93,22 @@ impl Level {
         Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string(), size))
     }
 
-    pub fn build_from_tuple<T: ToString>(
-        (&start_pos, &goal_pos, layout, title): 
-        (&[usize; 2], &[usize; 2], &Vec<Vec<Cell>>, T)
-    ) -> Result<Level, String> {
-            Self::build(&start_pos, &goal_pos, &layout, title, None)
-        }
-
     pub fn build_from_file<P: AsRef<Path>>(filepath: P) 
-    -> Result<Level, String> {
-        let builder = LevelBuilder::from_file(filepath)?;
-        let size = [builder.layout.len(), builder.layout[0].len()];
-        for r in &builder.layout {
-            if r.len() != size[1] { 
-                return Err("Rows are not the same length".to_string()); 
-            }
-        };
-        Self::build(&builder.start_pos, &builder.goal_pos, &builder.layout, builder.title, Some(size))
+    -> Result<Level, Box<dyn Error>> {
+        let builder: LevelBuilder = serde_json::from_str(
+            &read_to_string(&filepath)?
+        )?;
+        // will use title attribute if present, else default to file name
+        let title = builder.title
+            .or_else(|| 
+                filepath
+                .as_ref()
+                .file_stem()
+                .map_or(None, |p| {
+                    p.to_str().map(|s| s.to_string())})
+            )
+            .ok_or("No valid title found")?;
+        Self::build(&builder.start_pos, &builder.goal_pos, &builder.layout, title, None)
     }
 
     pub fn is_pos_valid(&self, &pos: &[usize; 2]) -> bool {
@@ -227,8 +184,7 @@ impl Level {
             None => return,
             Some(dir) => {
                 let i_pos = self.current_pos;
-                //unwrap should not panic
-                if !self.move_player(&dir).or::<bool>(Ok(false)).unwrap() {
+                if !self.move_player(&dir).unwrap_or(false) {
                     self.player_state = None;
                 } else {
                     self.layout[i_pos[0] as usize][i_pos[1] as usize] = 
@@ -276,7 +232,6 @@ impl Level {
                 window.addch(' ');
             };
             // automatic wrap since window has len LENX*2+1
-            // window.addch('\n');
         };
         window.draw_box(0, 0);
         window.mvprintw(0, 3, &self.title);
@@ -317,7 +272,6 @@ pub fn run_level(
     resize(&mut window, &level); // centers level
     level.display(&window);
     while !level.is_done() {
-        // window.addstr();
         window.nodelay(false);
         match window.getch() {
             Some(Input::Character('q')) => {
@@ -459,6 +413,8 @@ pub fn menu(root: &Window) -> Result<Menuitems, &str>{
 
 }
 
+
+// honestly the tests don't do anything
 #[cfg(test)]
 mod tests {
     use super::*;

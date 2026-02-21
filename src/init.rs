@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use pancurses::{self, COLOR_BLACK, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE, curs_set, init_color, init_pair, noecho, start_color, use_default_colors};
+use pancurses::{COLOR_BLACK, COLOR_GREEN, COLOR_MAGENTA, COLOR_RED, COLOR_WHITE, curs_set, init_color, init_pair, noecho, start_color, use_default_colors};
 
 pub const BLACK: u32 = 0;
 pub const WHITE: u32 = 1;
