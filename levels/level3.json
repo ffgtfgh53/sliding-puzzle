@@ -1,1 +1,16 @@
-{"start_pos":[0,0],"goal_pos":[1,1],"layout":[["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"],["Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty"],["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"],["Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"],["Wall","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall","Empty","Empty","Empty","Empty","Empty","Wall"]],"title":"Level 3"}
+{
+    "start_pos":[0,0], 
+    "goal_pos":[1,1], 
+    "layout": [
+        ["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty"], 
+        ["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty"], 
+        ["Wall", "Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Empty","Wall", "Empty","Empty","Empty","Empty","Empty","Wall" ]
+    ]
+}
