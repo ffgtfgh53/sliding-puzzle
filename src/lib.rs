@@ -1,15 +1,15 @@
-use std::{error::Error, fs::read_to_string, path::Path, thread::sleep, time::Duration, usize};
+use std::{error::Error, fs::read_to_string, path::Path, thread::sleep, time::Duration};
 
-use pancurses::{Attribute, COLOR_PAIR, Input, Window, endwin, resize_term};
+use pancurses::{Attribute, COLOR_PAIR, Input, Window, chtype, endwin, resize_term};
 
 use serde::{Serialize, Deserialize};
 
-use crate::init::{BLACK, GREEN, RED};
+use crate::init::{GREEN, RED, BLACK};
 
 mod init;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum Cell { Empty, Wall, OutOfBounds, Player, Goal }
+pub enum Cell { Empty, Wall, OutOfBounds }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Dir { Up, Down, Left, Right }
@@ -33,7 +33,6 @@ pub struct Level{
     size: [usize; 2],
     pub player_state: Option<Dir>,
     pub title: String,
-    redraw_goal: Option<[usize; 2]>, //need to improve, simply check goal_pos
 }
 
 impl Level {
@@ -49,23 +48,22 @@ impl Level {
         title: String,
         size: [usize; 2]
     ) -> Level{
-        // take ownership of layout (build function clones the layout)
-        // TODO: add reset function to allow reuse of levels without cloning layout
         Level {start_pos, 
             current_pos: start_pos, 
             goal_pos, 
             layout, 
             player_state: None, 
-            redraw_goal: None, 
             title: title,
             size: size,
         }
     }
 
+    /// Take ownership of layout as it is expensive to copy
+    /// To prevent this, simply pass layout.clone() as an argument
     pub fn build<T: ToString>(
         &start_pos: &[usize; 2], 
         &goal_pos: &[usize; 2], 
-        layout: &Vec<Vec<Cell>>,
+        layout: Vec<Vec<Cell>>,
         title: T,
         size: Option<[usize; 2]>
     ) -> Result<Level, Box<dyn Error>> {
@@ -74,7 +72,7 @@ impl Level {
             None => {
                 // check layout is rectangular
                 let size: [usize; 2] = [layout.len(), layout[0].len()];
-                if layout.into_iter().any(|row| row.len() != size[1]) {
+                if layout.iter().any(|row| row.len() != size[1]) {
                     Err("Length of rows are not the same")?
                 } else {size}
             }
@@ -87,12 +85,9 @@ impl Level {
         if Self::get_cell_from_layout(&layout, &goal_pos) != Cell::Empty { 
             Err("Invalid goal pos: goal pos must be empty")?
         }
-        let mut processed = layout.clone();
-        processed[start_pos[0] as usize][start_pos[1] as usize] = Cell::Player;
-        processed[goal_pos[0] as usize][goal_pos[1] as usize] = Cell::Goal;
         // not complete checks, but checking if solvable requires solving it
         // will at least prevent panicking due to invalid pos
-        Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string(), size))
+        Ok(Level::new(&start_pos, &goal_pos, layout, title.to_string(), size))
     }
 
     /// Build a Level from a json config file
@@ -111,7 +106,13 @@ impl Level {
                     p.to_str().map(|s| s.to_string())})
             )
             .ok_or("No valid title found in file, perhaps missing 'title' attribute or invalid filename?")?;
-        Self::build(&builder.start_pos, &builder.goal_pos, &builder.layout, title, None)
+        Self::build(&builder.start_pos, &builder.goal_pos, builder.layout, title, None)
+    }
+
+    /// Reset the level, clearing any progress and restoring initial state
+    pub fn reset(&mut self) {
+        self.current_pos = self.start_pos;
+        self.player_state = None;
     }
 
     /// Check if a position exists inside self
@@ -154,8 +155,7 @@ impl Level {
                 Err(format!("New position out of bounds. Got: {:?}", new_pos)),
             Cell::Wall => 
                 Err(format!("New position is wall. Got: {:?}", new_pos)),
-            Cell::Player => Ok(()),
-            Cell::Empty | Cell::Goal => {
+            Cell::Empty => {
                 self.current_pos = new_pos; Ok(())
             }
         }
@@ -187,14 +187,8 @@ impl Level {
             Cell::OutOfBounds => 
                 Err(format!("Cannot move {:?}: Out of bounds", d)),
             Cell::Wall => Ok(false),
-            Cell::Player => Err(format!("Unexpected player at {:?}", pos)),
             Cell::Empty => {
                 self.change_pos(&pos)?;
-                Ok(true)
-            },
-            Cell::Goal => {
-                self.change_pos(&pos)?;
-                self.redraw_goal = Some(pos);
                 Ok(true)
             }
         }
@@ -205,18 +199,11 @@ impl Level {
         match self.player_state {
             None => return,
             Some(dir) => {
-                let i_pos = self.current_pos;
-                if !self.move_player(&dir).unwrap_or(false) {
-                    self.player_state = None;
+                if let Ok(true) = self.move_player(&dir) {
+                    return;
                 } else {
-                    self.layout[i_pos[0] as usize][i_pos[1] as usize] = 
-                        if self.redraw_goal == Some(i_pos) {
-                            self.redraw_goal = None; Cell::Goal
-                        } else {Cell::Empty};
-                    self.layout
-                        [self.current_pos[0] as usize]
-                        [self.current_pos[1] as usize] 
-                        = Cell::Player;
+                    // No move occured
+                    self.player_state = None;
                 }
             }
         }
@@ -225,6 +212,13 @@ impl Level {
     /// Whether the level is complete
     pub fn is_done(&self) -> bool {
         self.player_state == None && self.current_pos == self.goal_pos
+    }
+
+    /// helper fn for display()
+    fn mvaddch_from_pos(window: &Window, pos: &[usize; 2], ch: char, attrs: Vec<chtype>) {
+        for attr in attrs.iter() { window.attron(attr.clone()); }
+        window.mvaddch((pos[0] as i32)+1, (pos[1] as i32)*2+1, ch);
+        for attr in attrs.iter() { window.attroff(*attr); }
     }
 
     /// Clear and display the level in the window
@@ -237,18 +231,6 @@ impl Level {
                 match c {
                     Cell::Wall => { window.addch('#'); },
                     Cell::Empty => { window.addch('.'); },
-                    Cell::Player => {
-                        window.attron(Attribute::Blink);
-                        window.attron(COLOR_PAIR(RED));
-                        window.addch('O');
-                        window.attroff(COLOR_PAIR(RED));
-                        window.attroff(Attribute::Blink);
-                    },
-                    Cell::Goal => {
-                        window.attron(COLOR_PAIR(GREEN));
-                        window.addch('P');
-                        window.attroff(COLOR_PAIR(GREEN));
-                    },
                     // Unknown character
                     _ => { window.addch('?'); },
                 };
@@ -256,8 +238,15 @@ impl Level {
             };
             // automatic wrap since window has len LENX*2+1
         };
+        
         window.draw_box(0, 0);
         window.mvprintw(0, 3, &self.title);
+        // Add goal
+        Self::mvaddch_from_pos(window, &self.goal_pos, 'P', vec![GREEN]);
+        // Add player
+        Self::mvaddch_from_pos(window, &self.current_pos, 'O', 
+            vec![Attribute::Blink.into(), COLOR_PAIR(RED)]);
+
         window.mv(0, 0);
         window.refresh();
     }
@@ -345,32 +334,38 @@ pub enum Menuitems {
     Next, Select, Exit
 }
 
-impl Menuitems {
-    pub const fn array() -> [Menuitems; 3] {
-        use Menuitems::*;
-        [Next, Select, Exit]
-    }
-    pub fn to_str(&self) -> &str {
-        match self {
+impl Into<&str> for Menuitems{
+    fn into(self) -> &'static str {
+        match &self {
             Menuitems::Next => "Next level",
             Menuitems::Select => "Select Level",
             Menuitems::Exit => "Exit"
         }
     }
-    pub fn to_str_main_menu(&self) -> &str {
+}
+
+impl Menuitems {
+    pub fn iter() -> impl ExactSizeIterator<Item = Menuitems> {
+        use Menuitems::*;
+        [Next, Select, Exit].into_iter()
+    }
+    pub fn to_str_main_menu(&self) -> &'static str {
         match self {
             Menuitems::Next => "Start",
-            item => item.to_str()
+            item => {
+                (*item).into()
+            }
         }
     }
-    pub const fn size() -> (i32, i32) {(5, 20)}
+    
+    pub const fn size() -> (i32, i32) { (5, 20) }
 }
 
 
 #[allow(non_upper_case_globals)]
 pub fn menu(root: &Window) -> Result<Menuitems, &str>{
     let mut selected: usize = 0;
-    const selected_max: usize = Menuitems::array().len() - 1;
+    let selected_max: usize = Menuitems::iter().len() - 1;
     
     let resize = |window: &mut Window| {
         let size = Menuitems::size();
@@ -401,7 +396,7 @@ pub fn menu(root: &Window) -> Result<Menuitems, &str>{
     loop {
         window.erase();
         
-        for (i, item) in Menuitems::array().iter().enumerate() {
+        for (i, item) in Menuitems::iter().enumerate() {
             if i == selected {
                 window.attron(COLOR_PAIR(GREEN));
                 window.mvaddstr(i as i32 + 1, 2, 
@@ -426,7 +421,7 @@ pub fn menu(root: &Window) -> Result<Menuitems, &str>{
             Input::KeyDown => selected = 0,
             Input::Character('q') => return Ok(Menuitems::Exit),
             Input::KeyEnter | Input::Character('\n') => 
-                return Ok(Menuitems::array()[selected]),
+                return Ok(Menuitems::iter().nth(selected).expect("Bound checking already occured")),
             Input::KeyResize => resize(&mut window),
             _ => continue
         }
