@@ -15,6 +15,8 @@ pub enum Cell { Empty, Wall, OutOfBounds, Player, Goal }
 pub enum Dir { Up, Down, Left, Right }
 
 #[derive(Debug, Serialize, Deserialize)]
+/// Act as itermediary for serialising and deserialing Level
+/// Used in Level::build_from_file()
 struct LevelBuilder{
     start_pos: [usize; 2],
     goal_pos: [usize; 2],
@@ -93,11 +95,12 @@ impl Level {
         Ok(Level::new(&start_pos, &goal_pos, processed, title.to_string(), size))
     }
 
+    /// Build a Level from a json config file
     pub fn build_from_file<P: AsRef<Path>>(filepath: P) 
-    -> Result<Level, Box<dyn Error>> {
-        let builder: LevelBuilder = serde_json::from_str(
-            &read_to_string(&filepath)?
-        )?;
+        -> Result<Level, Box<dyn Error>> 
+    {
+        let builder: LevelBuilder = 
+            serde_json::from_str(&read_to_string(&filepath)?)?;
         // will use title attribute if present, else default to file name
         let title = builder.title
             .or_else(|| 
@@ -107,33 +110,43 @@ impl Level {
                 .map_or(None, |p| {
                     p.to_str().map(|s| s.to_string())})
             )
-            .ok_or("No valid title found")?;
+            .ok_or("No valid title found in file, perhaps missing 'title' attribute or invalid filename?")?;
         Self::build(&builder.start_pos, &builder.goal_pos, &builder.layout, title, None)
     }
 
+    /// Check if a position exists inside self
     pub fn is_pos_valid(&self, &pos: &[usize; 2]) -> bool {
         let [y, x] = pos;
         (..self.size[0]).contains(&(y as usize)) && (..self.size[1]).contains(&(x as usize))
     }
 
+    /// Check if a position exists in a given size
+    // wait wtf why is this not bool? TODO: fix
     pub fn check_pos_valid_from_size(&pos: &[usize; 2], &size: &[usize; 2]
     ) -> Result<(), String> {
         let ([may, max], [y, x]) = (size, pos);
-        if (..may).contains(&y) && (..max).contains(&x) {Ok(())}
-        else {Err(format!("Invalid position: {:?}", pos))}
+        if (..may).contains(&y) && (..max).contains(&x) { 
+            Ok(()) 
+        } else { 
+            Err(format!("Invalid position: {:?}", pos)) 
+        }
     }
 
-    fn get_cell_from_layout(layout: &Vec<Vec<Cell>>, &pos: &[usize; 2]
+    fn get_cell_from_layout(layout: &Vec<Vec<Cell>>, pos: &[usize; 2]
     ) -> Cell {
         let [a, b] = pos;
-        layout[a as usize][b as usize]
+        layout[*a][*b]
     }
 
-    pub fn get_cell(&self, &pos: &[usize; 2]) -> Cell {
-        if !self.is_pos_valid(&pos) { Cell::OutOfBounds } 
-        else { Self::get_cell_from_layout(&self.layout, &pos) } 
+    /// Get the type of Cell at the position
+    pub fn get_cell(&self, pos: &[usize; 2]) -> Cell {
+        if !self.is_pos_valid(pos) { Cell::OutOfBounds } 
+        else { Self::get_cell_from_layout(&self.layout, pos) } 
     }
 
+    /// Change the current position of the player
+    /// 
+    /// Fails if new position is invalid
     pub fn change_pos(&mut self, &new_pos: &[usize; 2]
     ) -> Result<(), String> {
         match self.get_cell(&new_pos) {
@@ -148,6 +161,9 @@ impl Level {
         }
     }
 
+    /// Get the postion in the direction relative to the given position
+    /// 
+    /// Fails if overflow occurs (implies position is out of bounds)
     pub fn get_relative_pos(&self, d: &Dir) -> Option<[usize; 2]> {
         let mut pos = self.current_pos;
         match d {
@@ -159,6 +175,11 @@ impl Level {
         Some(pos)
     }
 
+    /// Move the player in an arbitrary direction
+    /// 
+    /// Return bool based on whether the move was successful
+    /// 
+    /// Fails when out of bounds
     pub fn move_player(&mut self, &d: &Dir) -> Result<bool, String> {
         let pos: [usize; 2] = 
             self.get_relative_pos(&d).ok_or(format!("Cannot move {:?}: Out of bounds", d))?;
@@ -179,6 +200,7 @@ impl Level {
         }
     }
 
+    /// Move the player based on current player state, and update it accordingly
     pub fn tick(&mut self) {
         match self.player_state {
             None => return,
@@ -200,12 +222,13 @@ impl Level {
         }
     }
 
+    /// Whether the level is complete
     pub fn is_done(&self) -> bool {
         self.player_state == None && self.current_pos == self.goal_pos
     }
 
+    /// Clear and display the level in the window
     pub fn display(&self, window: &Window) {
-        //! Clears the window and displays the level in the window.
         window.erase();
         window.addch('\n');
         for row in &self.layout{
@@ -297,7 +320,7 @@ pub fn run_level(
             level.display(&window);
             window.refresh();            
             sleep(Duration::from_millis(30));
-            // prevents key spamming issue
+            // prevents queuing of keys while player is sliding
             while let Some(input) = window.getch() {
                 match input {
                     Input::Character('q') => {
