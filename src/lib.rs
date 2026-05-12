@@ -53,8 +53,8 @@ impl Level {
             goal_pos, 
             layout, 
             player_state: None, 
-            title: title,
-            size: size,
+            title,
+            size,
         }
     }
 
@@ -101,8 +101,7 @@ impl Level {
             .or_else(|| 
                 filepath
                 .as_ref()
-                .file_stem()
-                .map_or(None, |p| {
+                .file_stem().and_then(|p| {
                     p.to_str().map(|s| s.to_string())})
             )
             .ok_or("No valid title found in file, perhaps missing 'title' attribute or invalid filename?")?;
@@ -118,7 +117,7 @@ impl Level {
     /// Check if a position exists inside self
     pub fn is_pos_valid(&self, &pos: &[usize; 2]) -> bool {
         let [y, x] = pos;
-        (..self.size[0]).contains(&(y as usize)) && (..self.size[1]).contains(&(x as usize))
+        (..self.size[0]).contains(&{ y }) && (..self.size[1]).contains(&{ x })
     }
 
     /// Check if a position exists in a given size
@@ -197,10 +196,9 @@ impl Level {
     /// Move the player based on current player state, and update it accordingly
     pub fn tick(&mut self) {
         match self.player_state {
-            None => return,
+            None => (),
             Some(dir) => {
                 if let Ok(true) = self.move_player(&dir) {
-                    return;
                 } else {
                     // No move occured
                     self.player_state = None;
@@ -211,12 +209,12 @@ impl Level {
 
     /// Whether the level is complete
     pub fn is_done(&self) -> bool {
-        self.player_state == None && self.current_pos == self.goal_pos
+        self.player_state.is_none() && self.current_pos == self.goal_pos
     }
 
     /// helper fn for display()
     fn mvaddch_from_pos(window: &Window, pos: &[usize; 2], ch: char, attrs: Vec<chtype>) {
-        for attr in attrs.iter() { window.attron(attr.clone()); }
+        for attr in attrs.iter() { window.attron(*attr); }
         window.mvaddch((pos[0] as i32)+1, (pos[1] as i32)*2+1, ch);
         for attr in attrs.iter() { window.attroff(*attr); }
     }
@@ -281,7 +279,7 @@ pub fn run_level(
             };
         };
         
-    resize(&mut window, &level); // centers level
+    resize(&mut window, level); // centers level
     level.display(&window);
     while !level.is_done() {
         window.nodelay(false);
@@ -295,7 +293,7 @@ pub fn run_level(
             Some(Input::KeyLeft) => dir = Dir::Left,
             Some(Input::KeyRight) => dir = Dir::Right,
             Some(Input::KeyResize) => {
-                resize(&mut window, &level);
+                resize(&mut window, level);
                 continue;
             }
             _ => continue,
@@ -303,7 +301,7 @@ pub fn run_level(
 
         level.player_state = Some(dir);
         loop {
-            if let None = level.player_state {break}
+            if level.player_state.is_none() {break}
             window.nodelay(true);
             level.tick();
             level.display(&window);
@@ -317,7 +315,7 @@ pub fn run_level(
                         return Ok(Menuitems::Exit);
                     }
                     Input::KeyResize => {
-                        resize(&mut window, &level);
+                        resize(&mut window, level);
                     },
                     _ => ()
                 }
@@ -334,9 +332,9 @@ pub enum Menuitems {
     Next, Select, Exit
 }
 
-impl Into<&str> for Menuitems{
-    fn into(self) -> &'static str {
-        match &self {
+impl From<Menuitems> for &str{
+    fn from(val: Menuitems) -> Self {
+        match &val {
             Menuitems::Next => "Next level",
             Menuitems::Select => "Select Level",
             Menuitems::Exit => "Exit"
@@ -405,7 +403,7 @@ pub fn menu(root: &Window) -> Result<Menuitems, &str>{
             } else {
                 window.attron(COLOR_PAIR(BLACK));
                 window.mvaddstr(i as i32 + 1, 4, 
-                    format!("{}", item.to_str_main_menu()));
+                    item.to_str_main_menu());
             }
             window.addch('\n');
         }
